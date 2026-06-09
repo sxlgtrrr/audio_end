@@ -11,7 +11,6 @@ import random
 import io
 import struct
 import tempfile
-import soundfile as sf
 from flask import Flask, render_template, request, jsonify
 
 import config
@@ -68,11 +67,11 @@ def index():
 @app.route('/api/analyze', methods=['POST'])
 def analyze():
     try:
+        # 支持 WAV blob 或文件上传
         wav_bytes = request.get_data()
         if len(wav_bytes) < 1000:
             return jsonify({'error': '音频太短'}), 400
 
-        # 保存为临时 WAV 文件，用 librosa 加载（和训练完全一致）
         with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as f:
             f.write(wav_bytes)
             wav_path = f.name
