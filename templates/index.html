@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>语音情感感知助手</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    min-height: 100vh; color: #eee; display: flex; justify-content: center;
+    align-items: center; padding: 20px;
+  }
+  .container { max-width: 600px; width: 100%; }
+  .title {
+    text-align: center; font-size: 28px; font-weight: bold;
+    margin-bottom: 30px; background: linear-gradient(90deg, #e94560, #0f3460);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .card {
+    background: rgba(255,255,255,0.05); backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,0.1); border-radius: 16px;
+    padding: 24px; margin-bottom: 16px;
+  }
+
+  /* 录音按钮 */
+  .record-area { text-align: center; }
+  .record-btn {
+    width: 80px; height: 80px; border-radius: 50%; border: 3px solid #e94560;
+    background: transparent; cursor: pointer; transition: all 0.3s;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .record-btn:hover { background: rgba(233,69,96,0.1); }
+  .record-btn .mic { font-size: 36px; }
+  .record-btn.recording {
+    border-color: #ff0000; background: rgba(255,0,0,0.15);
+    animation: pulse 1.5s infinite;
+  }
+  @keyframes pulse {
+    0%,100% { box-shadow: 0 0 0 0 rgba(255,0,0,0.4); }
+    50% { box-shadow: 0 0 0 16px rgba(255,0,0,0); }
+  }
+  .record-hint { margin-top: 12px; font-size: 14px; color: #888; }
+
+  /* 录音计时 */
+  .timer {
+    font-size: 20px; font-weight: bold; color: #e94560; margin-top: 8px;
+    display: none;
+  }
+  .timer.show { display: block; }
+
+  /* 加载动画 */
+  .loading {
+    display: none; margin: 16px 0; text-align: center;
+  }
+  .loading.show { display: block; }
+  .spinner {
+    width: 32px; height: 32px; border: 3px solid rgba(255,255,255,0.2);
+    border-top-color: #e94560; border-radius: 50%;
+    animation: spin 0.8s linear infinite; margin: 0 auto 8px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* 结果卡片 */
+  .result { display: none; }
+  .result.show { display: block; }
+
+  .emotion-badge {
+    display: inline-block; padding: 8px 20px; border-radius: 24px;
+    font-size: 24px; font-weight: bold; margin: 8px 0;
+    background: rgba(255,255,255,0.1);
+  }
+
+  .confidence-bar {
+    height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px;
+    margin: 4px 0; overflow: hidden;
+  }
+  .confidence-bar .fill {
+    height: 100%; border-radius: 3px; transition: width 0.8s ease;
+  }
+
+  .text-result {
+    margin: 12px 0; padding: 12px; background: rgba(255,255,255,0.05);
+    border-radius: 8px; border-left: 3px solid #e94560;
+  }
+  .text-result .label { color: #888; font-size: 12px; }
+  .text-result .content { font-size: 18px; margin-top: 4px; }
+
+  .response-box {
+    margin: 12px 0; padding: 16px; background: linear-gradient(135deg, rgba(233,69,96,0.15), rgba(15,52,96,0.15));
+    border-radius: 12px; font-size: 16px; line-height: 1.6;
+    position: relative;
+  }
+  .response-box::before { content: '🤖'; position: absolute; top: -12px; left: 16px; font-size: 24px; }
+
+  .prob-list { margin-top: 12px; }
+  .prob-item {
+    display: flex; align-items: center; margin: 4px 0; font-size: 13px;
+  }
+  .prob-item .emoji { width: 32px; }
+  .prob-item .name { width: 60px; }
+  .prob-item .bar {
+    flex:1; height: 16px; background: rgba(255,255,255,0.1);
+    border-radius: 8px; margin: 0 8px; overflow: hidden;
+  }
+  .prob-item .bar div {
+    height: 100%; border-radius: 8px; transition: width 0.8s ease;
+  }
+  .prob-item .pct { width: 42px; text-align: right; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1 class="title">🎙 语音情感感知助手</h1>
+
+  <!-- 录音区 -->
+  <div class="card">
+    <div class="record-area">
+      <button class="record-btn" id="recordBtn" onclick="toggleRecord()">
+        <span class="mic">🎤</span>
+      </button>
+      <div class="timer" id="timer">00:00</div>
+      <div class="record-hint" id="recordHint">点击开始录音，说完话后再点击停止</div>
+    </div>
+
+    <div class="loading" id="loading">
+      <div class="spinner"></div>
+      <span>正在分析你的语音...</span>
+    </div>
+  </div>
+
+  <!-- 结果区 -->
+  <div class="card result" id="resultCard">
+    <div style="text-align:center;">
+      <div class="emotion-badge" id="emotionBadge"></div>
+      <div style="font-size:14px;color:#888;margin-top:4px;">
+        置信度: <strong id="confidenceText">0%</strong>
+      </div>
+    </div>
+
+    <div class="text-result" id="textResult">
+      <div class="label">📝 你说的内容:</div>
+      <div class="content" id="textContent"></div>
+    </div>
+
+    <div class="response-box" id="responseBox"></div>
+
+    <div class="prob-list" id="probList"></div>
+  </div>
+</div>
+
+<script>
+let mediaRecorder, audioChunks = [], startTime, timerInterval;
+let audioContext = null;
+
+function toggleRecord() {
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    stopRecord();
+  } else {
+    startRecord();
+  }
+}
+
+async function startRecord() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: {
+      sampleRate: 16000, channelCount: 1, echoCancellation: true
+    }});
+    audioContext = new AudioContext({ sampleRate: 16000 });
+    const source = audioContext.createMediaStreamSource(stream);
+    const processor = audioContext.createScriptProcessor(4096, 1, 1);
+    const dest = audioContext.createMediaStreamDestination();
+
+    source.connect(processor);
+    processor.connect(dest);
+    processor.connect(audioContext.destination);
+
+    // 使用 MediaRecorder 录制
+    mediaRecorder = new MediaRecorder(dest.stream, {
+      mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus' : 'audio/webm'
+    });
+    audioChunks = [];
+
+    mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
+    mediaRecorder.onstop = async () => {
+      processor.disconnect();
+      source.disconnect();
+      stream.getTracks().forEach(t => t.stop());
+      if (audioContext) audioContext.close();
+
+      const blob = new Blob(audioChunks, { type: 'audio/webm' });
+      await processAudio(blob);
+    };
+
+    mediaRecorder.start();
+    startTime = Date.now();
+    document.getElementById('recordBtn').classList.add('recording');
+    document.getElementById('recordHint').textContent = '正在录音... 说完话后点击停止';
+    document.getElementById('timer').classList.add('show');
+    timerInterval = setInterval(updateTimer, 200);
+    document.getElementById('resultCard').classList.remove('show');
+  } catch(e) {
+    alert('无法访问麦克风: ' + e.message);
+  }
+}
+
+function stopRecord() {
+  if (mediaRecorder) {
+    mediaRecorder.stop();
+    document.getElementById('recordBtn').classList.remove('recording');
+    document.getElementById('recordHint').textContent = '点击开始录音';
+    document.getElementById('timer').classList.remove('show');
+    clearInterval(timerInterval);
+    document.getElementById('loading').classList.add('show');
+    mediaRecorder = null;
+  }
+}
+
+function updateTimer() {
+  const elapsed = Math.floor((Date.now() - startTime) / 1000);
+  const m = Math.floor(elapsed/60).toString().padStart(2,'0');
+  const s = (elapsed%60).toString().padStart(2,'0');
+  document.getElementById('timer').textContent = `${m}:${s}`;
+}
+
+async function processAudio(blob) {
+  // 转成 WAV base64
+  const arrayBuffer = await blob.arrayBuffer();
+  const audioCtx = new OfflineAudioContext(1, 1, 16000);
+  const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+
+  // 重采样到 16kHz
+  const srcRate = audioBuffer.sampleRate;
+  const offline = new OfflineAudioContext(1, audioBuffer.duration * 16000, 16000);
+  const src = offline.createBufferSource();
+  src.buffer = audioBuffer;
+  src.connect(offline.destination);
+  src.start();
+  const resampled = await offline.startRendering();
+
+  const pcm16 = new Int16Array(resampled.length);
+  for (let i = 0; i < resampled.length; i++) {
+    pcm16[i] = Math.max(-32768, Math.min(32767, resampled.getChannelData(0)[i] * 32767));
+  }
+
+  // WAV header + PCM
+  const wavBuffer = new ArrayBuffer(44 + pcm16.length * 2);
+  const view = new DataView(wavBuffer);
+  writeString(view, 0, 'RIFF');
+  view.setUint32(4, 36 + pcm16.length*2, true);
+  writeString(view, 8, 'WAVE');
+  writeString(view, 12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, 16000, true);
+  view.setUint32(28, 16000*2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeString(view, 36, 'data');
+  view.setUint32(40, pcm16.length*2, true);
+  const wavView = new Int16Array(wavBuffer, 44);
+  wavView.set(pcm16);
+
+  const base64Str = btoa(String.fromCharCode(...new Uint8Array(wavBuffer)));
+
+  // 发送到后端
+  try {
+    const resp = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ audio: base64Str })
+    });
+    const data = await resp.json();
+    showResult(data);
+  } catch(e) {
+    alert('分析失败: ' + e.message);
+  } finally {
+    document.getElementById('loading').classList.remove('show');
+  }
+}
+
+function writeString(view, offset, str) {
+  for (let i = 0; i < str.length; i++) view.setUint8(offset+i, str.charCodeAt(i));
+}
+
+function showResult(data) {
+  document.getElementById('emotionBadge').textContent =
+    data.emotion_icon + ' ' + data.emotion;
+  document.getElementById('emotionBadge').style.background =
+    data.emotion_color + '22';
+  document.getElementById('emotionBadge').style.border =
+    '2px solid ' + data.emotion_color;
+  document.getElementById('confidenceText').textContent = data.confidence + '%';
+  document.getElementById('textContent').textContent = data.text;
+  document.getElementById('responseBox').textContent = data.response;
+
+  // 概率分布
+  const probs = data.probabilities;
+  const icons = { angry:'😠', disgust:'🤢', fear:'😨', happy:'😊', neutral:'😐', sad:'😢' };
+  const colors = { angry:'#e74c3c', disgust:'#8e44ad', fear:'#f39c12',
+                   happy:'#2ecc71', neutral:'#95a5a6', sad:'#3498db' };
+  let html = '';
+  for (const [e, v] of Object.entries(probs)) {
+    const pct = (v*100).toFixed(1);
+    html += `<div class="prob-item">
+      <span class="emoji">${icons[e]||''}</span>
+      <span class="name">${e}</span>
+      <div class="bar"><div style="width:${pct}%;background:${colors[e]||'#666'}"></div></div>
+      <span class="pct">${pct}%</span>
+    </div>`;
+  }
+  document.getElementById('probList').innerHTML = html;
+  document.getElementById('resultCard').classList.add('show');
+}
+</script>
+</body>
+</html>
