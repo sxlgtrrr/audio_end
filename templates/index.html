@@ -375,7 +375,7 @@ async function sendForAnalysis(pcm) {
   const raw = pcm.buffer;
 
   try {
-    const resp = await fetch('/api/analyze', {
+    const resp = await fetch('/api/analyze?sr=' + audioCtx.sampleRate, {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
       body: raw
