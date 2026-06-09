@@ -319,6 +319,8 @@ function stopRecord() {
   document.getElementById('recTimer').classList.remove('show');
   document.getElementById('waveform').classList.remove('active');
 
+  const sampleRate = audioCtx ? audioCtx.sampleRate : 16000;
+
   if (audioCtx) {
     audioCtx.close().catch(()=>{});
     audioCtx = null;
@@ -332,7 +334,7 @@ function stopRecord() {
   for (const c of pcmChunks) { audio.set(c, offset); offset += c.length; }
   pcmChunks = [];
 
-  sendForAnalysis(audio);
+  sendForAnalysis(audio, sampleRate);
 }
 
 function updateTimer() {
@@ -368,14 +370,14 @@ function drawWaveform() {
 }
 
 // ===== 发送分析 =====
-async function sendForAnalysis(pcm) {
+async function sendForAnalysis(pcm, sampleRate) {
   document.getElementById('analyzingBar').classList.add('show');
   document.getElementById('recBtn').disabled = true;
 
   const raw = pcm.buffer;
 
   try {
-    const resp = await fetch('/api/analyze?sr=' + audioCtx.sampleRate, {
+    const resp = await fetch('/api/analyze?sr=' + sampleRate, {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
       body: raw
