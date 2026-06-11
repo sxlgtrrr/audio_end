@@ -1,22 +1,41 @@
-# 数据文件
-data/
-!data/*.py
+﻿# 语音信息处理课设 .gitignore
 
-# 模型权重
-models/
-
-# 输出图片
-logs/*.png
-
-# Python
+# ======== Python ========
 __pycache__/
 *.pyc
 *.pyo
+*.so
 
-# 大文件
-*.zip
+# ======== 大模型文件 ========
+models/*.pth
+models/*.pt
+*.pth
+*.pt
+
+# ======== 音频数据 ========
+data/
+*.wav
+
+# ======== 日志 ========
+logs/*.json
+logs/*.txt
+logs/*.png
+logs/*.log
+
+# ======== 说话人模型 ========
+speaker_models.pkl
+
+# ======== PPT / 文档 ========
+*.pptx
 *.pdf
+*.zip
 
-# 环境
-myenv/
+# ======== 环境 ========
+.env
+venv/
 .venv/
+__pycache__/
+
+# ======== IDE ========
+.vscode/
+.idea/
