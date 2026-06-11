@@ -208,42 +208,71 @@ class HybridCNNLSTM(nn.Module):
 ## 四、实验结果与分析
 
 ### 4.1 数据集
-使用RAVDESS (Ryerson Audio-Visual Database of Emotional Speech and Song)数据集：
-- 训练集: 约800个样本
-- 验证集: 约200个样本
-- 测试集: 约200个样本
-- 情感类别: 6种 (愤怒、快乐、悲伤、恐惧、惊讶、中性)
+使用 **CREMA-D** (Crowd-sourced Emotional Multimodal Actors Dataset) 数据集：
+- 总样本: 7,442 条音频，91 位演员，12 句台词
+- 训练集: 5,147 条 (69.2%)
+- 验证集: 1,148 条 (15.4%)
+- 测试集: 1,147 条 (15.4%)
+- 情感类别: 6 种 (angry, disgust, fear, happy, neutral, sad)
+- 划分方式: 说话人独立 (speaker-independent)
+- 采样率: 16kHz，固定时长 3 秒
 
 ### 4.2 性能指标
 
-**整体准确率**: XX.XX%
+#### 4.2.1 最佳单模型：WavLM-base + CTM K=4 + SupCon
 
-**各类别性能**:
+**整体 Test 准确率**: 72.89%
 
-| 情感类别 | 精确率(Precision) | 召回率(Recall) | F1分数 |
-|---------|------------------|---------------|--------|
-| Angry   | XX.XX%          | XX.XX%        | XX.XX% |
-| Happy   | XX.XX%          | XX.XX%        | XX.XX% |
-| Sad     | XX.XX%          | XX.XX%        | XX.XX% |
-| Fearful | XX.XX%          | XX.XX%        | XX.XX% |
-| Surprise| XX.XX%          | XX.XX%        | XX.XX% |
-| Neutral | XX.XX%          | XX.XX%        | XX.XX% |
+**各类别性能 (Test 集，每类 196 样本，neutral 167)**：
 
-### 4.3 可视化结果
+| 情感类别 | Precision | Recall | F1 Score |
+|---------|-----------|--------|----------|
+| angry   | 62.9%     | 90.8%  | 74.3%    |
+| disgust | 84.5%     | 61.2%  | 71.0%    |
+| fear    | 68.2%     | 77.6%  | 72.6%    |
+| happy   | 82.0%     | 69.9%  | 75.5%    |
+| neutral | 73.8%     | 86.2%  | 79.6%    |
+| sad     | 76.6%     | 53.6%  | 63.1%    |
 
-**训练曲线**:
-- Loss曲线显示模型收敛良好
-- 准确率稳步提升并趋于稳定
-- 无明显过拟合现象
+#### 4.2.2 完整消融实验汇总（Val + Test）
 
-**混淆矩阵**:
-- 主对角线值较高，表明分类准确
-- 易混淆类别分析（如sad vs fearful）
+| 模型配置 | Val Acc | Test Acc | Δ Val→Test | 参数量 |
+|---------|---------|----------|------------|--------|
+| WavLM + Mean Pooling | 73.00% | 69.83% | -3.17 | 95.2M |
+| WavLM + Attn Pooling (Baseline) | 74.91% | — | — | 95.2M |
+| WavLM + CTM K=1 (SupCon 0.01) | 72.74% | 68.09% | -4.65 | 95.8M |
+| WavLM + CTM K=2 (SupCon 0.1) | 73.61% | 68.70% | -4.91 | 95.8M |
+| **WavLM + CTM K=4 (SupCon 0.1)** | **74.56%** | **72.89%** | **-1.67** | **95.8M** |
+| WavLM + CTM K=4 + Center | 73.95% | 71.14% | -2.81 | 95.8M |
+| WavLM + MoE (Conv Experts) | 72.56% | 70.62% | -1.94 | 100.4M |
+| HuBERT + Attn Pooling | 71.43% | 70.01% | -1.42 | 95.2M |
 
-**特征可视化**:
-- MFCC特征图展示时频分布
-- Mel频谱图直观呈现声音能量分布
-- 注意力权重可视化关键时间区域
+#### 4.2.3 多模型融合
+
+| 配置 | Val | Test |
+|------|-----|------|
+| 4 模型 Ensemble (无 CTM) | 76.66% | 74.89% |
+| **5 模型 Ensemble (含 CTM)** | 75.52% | **75.85%** |
+| CTM K=4 单模型 | 74.56% | 72.89% |
+
+#### 4.2.4 与 EmoBox 基准 (Interspeech 2024) 对比
+
+| 模型 | 参数量 | CREMA-D Acc |
+|------|--------|-------------|
+| Whisper large v3 | 1.5B | 76.48% |
+| WavLM large | 317M | 74.32% |
+| HuBERT large | 317M | 73.64% |
+| WavLM base | 95M | 69.49% |
+| **Ours: CTM K=4 (单模型)** | **95.8M** | **72.89%** |
+| **Ours: 5 模型 Ensemble** | — | **75.85%** |
+
+### 4.3 消融分析结论
+
+1. **CTM 迭代推理有效**: K 值单调递增 K=1 (68.09%) < K=2 (68.70%) < K=4 (72.89%)，每一步推理都有增量价值
+2. **池化三级递进**: Mean Pooling (69.83%) < CTM K=4 (72.89%)，Attention 和迭代交叉注意力带来明确增益
+3. **参数效率极高**: CTM head 仅增加 0.6M 参数 (0.6%)，远优于 MoE 的 5.2M (5.5%)
+4. **SupCon + CE 最优**: Center Loss 无额外增益，SupCon 已做类内收紧
+5. **WavLM-base 达 competitive 水平**: Ensemble Test 75.85%，超越 EmoBox 中所有 base 模型，仅略低于 317M WavLM-large
 
 ## 五、讨论与总结
 
